@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: merge PR
-      uses: desbo/merge-pr-action@v0
+      uses: permutive-engineering/merge-pr-action@v0
       with:
         GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
         ALLOWED_UPDATE: minor
