@@ -5,11 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
 	"github.com/google/go-github/v33/github"
 	"golang.org/x/oauth2"
 )
+
+var ErrNotMergeable = errors.New("PR not mergeable")
+var ErrConflict = errors.New("PR has conflicts")
+var ErrBehind = errors.New("PR is behind base branch")
 
 type authenticatedGitHubClient struct {
 	ctx    context.Context
@@ -27,22 +32,39 @@ func newAuthenticatedClient(token string) *authenticatedGitHubClient {
 	return &authenticatedGitHubClient{ctx, client}
 }
 
-func (c *authenticatedGitHubClient) refetchPR(pr *github.PullRequest) error {
-	pr, _, err := c.client.PullRequests.Get(
+func (c *authenticatedGitHubClient) updatePRBranch(pr *github.PullRequest) error {
+	_, response, err := c.client.PullRequests.UpdateBranch(
 		c.ctx,
-		pr.Base.Repo.Owner.GetName(),
+		pr.Base.Repo.Owner.GetLogin(),
 		pr.Base.Repo.GetName(),
 		pr.GetNumber(),
+		&github.PullRequestBranchUpdateOptions{},
 	)
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if response.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("status %v when updating branch %v", response.Status, pr.Head.Label)
+	}
+
+	return nil
 }
 
 func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod string) error {
 	state := pr.GetMergeableState()
 
-	if strings.EqualFold(state, "conflicting") {
-		return errors.New("PR has conflicts, will not merge")
+	if strings.EqualFold(state, "dirty") {
+		return ErrConflict
+	}
+
+	if strings.EqualFold(state, "behind") {
+		return ErrBehind
+	}
+
+	if !pr.GetMergeable() {
+		return ErrNotMergeable
 	}
 
 	options := &github.PullRequestOptions{
@@ -66,6 +88,6 @@ func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod 
 		return fmt.Errorf("PR was not merged: %v", result.GetMessage())
 	}
 
-	log.Printf(result.GetMessage())
+	log.Print(result.GetMessage())
 	return nil
 }
