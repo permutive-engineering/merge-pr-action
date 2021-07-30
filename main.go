@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -77,7 +78,18 @@ func main() {
 	client := newAuthenticatedClient(token)
 
 	if err := client.mergePR(&event.PullRequest, mergeMethod); err != nil {
-		log.Fatalf("error merging PR: %v", err.Error())
+		// if the PR branch is behind the base, trigger an update (merge the base branch into the PR)
+		// this merge should retrigger the workflow that runs this action
+		// see https://docs.github.com/en/rest/reference/pulls#update-a-pull-request-branch
+		if errors.Is(err, ErrBehind) {
+			log.Print("branch is behind base, updating")
+
+			if err := client.updatePRBranch(&event.PullRequest); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			log.Fatalf("error merging PR: %v", err.Error())
+		}
 	}
 
 	os.Exit(0)
