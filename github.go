@@ -64,7 +64,7 @@ func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod 
 	}
 
 	if !pr.GetMergeable() {
-		return ErrNotMergeable
+		return fmt.Errorf("PR not mergable, state: %v. %w", state, ErrNotMergeable)
 	}
 
 	options := &github.PullRequestOptions{
