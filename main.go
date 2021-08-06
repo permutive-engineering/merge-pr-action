@@ -77,7 +77,7 @@ func main() {
 	mergeMethod := getRequiredEnvVar(mergeMethodVariable)
 	client := newAuthenticatedClient(token)
 
-	if err := client.mergePR(&event.PullRequest, mergeMethod); err != nil {
+	if err := client.mergePR(&event.PullRequest, mergeMethod, 0); err != nil {
 		// if the PR branch is behind the base, trigger an update (merge the base branch into the PR)
 		// this merge should retrigger the workflow that runs this action
 		// see https://docs.github.com/en/rest/reference/pulls#update-a-pull-request-branch

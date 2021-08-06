@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v33/github"
 	"golang.org/x/oauth2"
 )
+
+const maxRefetches = 4
 
 var ErrNotMergeable = errors.New("PR not mergeable")
 var ErrConflict = errors.New("PR has conflicts")
@@ -52,7 +56,18 @@ func (c *authenticatedGitHubClient) updatePRBranch(pr *github.PullRequest) error
 	return nil
 }
 
-func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod string) error {
+func (c *authenticatedGitHubClient) refetchPR(pr *github.PullRequest) (*github.PullRequest, error) {
+	pr, _, err := c.client.PullRequests.Get(
+		c.ctx,
+		pr.Base.Repo.Owner.GetName(),
+		pr.Base.Repo.GetName(),
+		pr.GetNumber(),
+	)
+
+	return pr, err
+}
+
+func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod string, attempt int) error {
 	state := pr.GetMergeableState()
 
 	if strings.EqualFold(state, "dirty") {
@@ -63,8 +78,25 @@ func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod 
 		return ErrBehind
 	}
 
+	if strings.EqualFold(state, "unknown") {
+		if attempt+1 == maxRefetches {
+			return fmt.Errorf("%w, state: %v. giving up after %v retries", ErrNotMergeable, state, attempt)
+		}
+
+		updatedPR, err := c.refetchPR(pr)
+		if err != nil {
+			return err
+		}
+
+		delay := time.Duration(math.Pow(2, float64(attempt))) * time.Second
+
+		time.Sleep(delay)
+
+		return c.mergePR(updatedPR, mergeMethod, attempt+1)
+	}
+
 	if !pr.GetMergeable() {
-		return fmt.Errorf("PR not mergable, state: %v. %w", state, ErrNotMergeable)
+		return fmt.Errorf("%w, state: %v", ErrNotMergeable, state)
 	}
 
 	options := &github.PullRequestOptions{
