@@ -59,12 +59,12 @@ func (c *authenticatedGitHubClient) updatePRBranch(pr *github.PullRequest) error
 func (c *authenticatedGitHubClient) refetchPR(pr *github.PullRequest) (*github.PullRequest, error) {
 	pr, _, err := c.client.PullRequests.Get(
 		c.ctx,
-		pr.Base.Repo.Owner.GetName(),
+		pr.Base.Repo.Owner.GetLogin(),
 		pr.Base.Repo.GetName(),
 		pr.GetNumber(),
 	)
 
-	return pr, err
+	return pr, fmt.Errorf("error refetching PR: %w", err)
 }
 
 func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod string, attempt int) error {
