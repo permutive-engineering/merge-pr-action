@@ -64,7 +64,11 @@ func (c *authenticatedGitHubClient) refetchPR(pr *github.PullRequest) (*github.P
 		pr.GetNumber(),
 	)
 
-	return pr, fmt.Errorf("error refetching PR: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("error refetching PR: %w", err)
+	}
+
+	return pr, nil
 }
 
 func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod string, attempt int) error {
@@ -79,6 +83,8 @@ func (c *authenticatedGitHubClient) mergePR(pr *github.PullRequest, mergeMethod 
 	}
 
 	if strings.EqualFold(state, "unknown") {
+		log.Println("PR mergable state unknown, refetching")
+
 		if attempt+1 == maxRefetches {
 			return fmt.Errorf("%w, state: %v. giving up after %v retries", ErrNotMergeable, state, attempt)
 		}
